@@ -5,11 +5,10 @@ import rx.*;
 import rx.functions.Action2;
 import rx.observables.JoinObservable;
 import rx.schedulers.Schedulers;
+import rx.subjects.PublishSubject;
 import rx.util.async.Async;
 import rx.util.async.StoppableObservable;
 
-import java.util.concurrent.Executor;
-import java.util.concurrent.Executors;
 import java.util.function.Consumer;
 
 /**
@@ -101,17 +100,24 @@ public final class RxTest {
     @Test
     public void testNet() {
 
-        Net net = (request, responseCallback) -> responseCallback.accept("good morning!");
+        final Net net = (request, responseCallback) -> responseCallback.accept("hi, " + request + "!");
 
-        final Executor executor = Executors.newSingleThreadExecutor();
+        final PublishSubject<String> subject1 = PublishSubject.<String>create();
+        final PublishSubject<String> subject2 = PublishSubject.<String>create();
 
-        net.sendRequestGetResponse("hello!", response -> {
+        final Observable<String> zip = Observable.zip(subject1, subject2, (i1, i2) -> i1 + "+" + i2);
+        zip.observeOn(myScheduler()).subscribe(s -> {
+            log("subscribe " + s);
+        });
 
-            Observable.just(response)
-                    .observeOn(Schedulers.from(executor)).
-                    subscribe(response1 -> {
-                        System.out.println("received response " + response1 + ", thread = " + Thread.currentThread().getName());
-                    });
+        net.sendRequestGetResponse("ping1", response -> {
+            subject1.onNext(response);
+            subject1.onCompleted();
+        });
+
+        net.sendRequestGetResponse("ping2", response -> {
+            subject2.onNext(response);
+            subject2.onCompleted();
         });
 
         sleep(100);
