@@ -8,6 +8,10 @@ import rx.schedulers.Schedulers;
 import rx.util.async.Async;
 import rx.util.async.StoppableObservable;
 
+import java.util.concurrent.Executor;
+import java.util.concurrent.Executors;
+import java.util.function.Consumer;
+
 /**
  * @author t.bukharaev.
  */
@@ -88,6 +92,29 @@ public final class RxTest {
                 return null;
             }
         });
+    }
+
+    public interface Net {
+        void sendRequestGetResponse(String request, Consumer<String> responseCallback);
+    }
+
+    @Test
+    public void testNet() {
+
+        Net net = (request, responseCallback) -> responseCallback.accept("good morning!");
+
+        final Executor executor = Executors.newSingleThreadExecutor();
+
+        net.sendRequestGetResponse("hello!", response -> {
+
+            Observable.just(response)
+                    .observeOn(Schedulers.from(executor)).
+                    subscribe(response1 -> {
+                        System.out.println("received response " + response1 + ", thread = " + Thread.currentThread().getName());
+                    });
+        });
+
+        sleep(100);
     }
 
     @Test
