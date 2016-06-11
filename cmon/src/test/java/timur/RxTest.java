@@ -9,6 +9,7 @@ import rx.subjects.PublishSubject;
 import rx.util.async.Async;
 import rx.util.async.StoppableObservable;
 
+import java.util.Random;
 import java.util.function.Consumer;
 
 /**
@@ -82,17 +83,6 @@ public final class RxTest {
         sleep();
     }
 
-    @Test
-    public void testPushLater() {
-        final Observable<Integer> observable = Observable.range(0, 5);
-        final Observable<Object> lift = observable.lift(new Observable.Operator<Object, Integer>() {
-            @Override
-            public Subscriber<? super Integer> call(Subscriber<? super Object> subscriber) {
-                return null;
-            }
-        });
-    }
-
     public interface Net {
         void sendRequestGetResponse(String request, Consumer<String> responseCallback);
     }
@@ -100,51 +90,66 @@ public final class RxTest {
     @Test
     public void testNet() {
 
-        final Net net = (request, responseCallback) -> responseCallback.accept("hi, " + request + "!");
+        Net net = getNet();
 
-        final PublishSubject<String> subject1 = PublishSubject.<String>create();
-        final PublishSubject<String> subject2 = PublishSubject.<String>create();
+        PublishSubject<String> subject1 = PublishSubject.<String>create();
+        PublishSubject<String> subject2 = PublishSubject.<String>create();
+        PublishSubject<String> subject3 = PublishSubject.<String>create();
 
-        final Observable<String> zip = Observable.zip(subject1, subject2, (i1, i2) -> i1 + "+" + i2);
-        zip.observeOn(myScheduler()).subscribe(s -> {
+        Scheduler scheduler = myScheduler();
+
+        Observable.zip(subject1.observeOn(scheduler), subject2.observeOn(scheduler), subject3.observeOn(scheduler), (r1, r2, r3) -> {
+            log("zip " + r1 + ", " + r2 + ", " + r3);
+            return r1 + " + " + r2 + " + " + r3;
+        }).subscribe(s -> {
             log("subscribe " + s);
         });
 
         net.sendRequestGetResponse("ping1", response -> {
+            log("get response " + response);
             subject1.onNext(response);
             subject1.onCompleted();
         });
 
         net.sendRequestGetResponse("ping2", response -> {
+            log("get response " + response);
             subject2.onNext(response);
             subject2.onCompleted();
+        });
+
+        net.sendRequestGetResponse("ping3", response -> {
+            log("get response " + response);
+            subject3.onNext(response);
+            subject3.onCompleted();
         });
 
         sleep(100);
     }
 
+    private static Net getNet() {
+        return (request, responseCallback) ->
+                new Thread(() -> {
+                    sleep(new Random().nextInt(50));
+                    responseCallback.accept("hi, " + request + "!");
+                }, "netThread").start();
+    }
+
     @Test
     public void testZip() {
 
-        final Observable<Integer> observable0 = Observable.create(subscriber -> {
-
-            new Thread(new Runnable() {
-                @Override
-                public void run() {
+        final Observable<Integer> observable0 = Observable.create(subscriber ->
+                new Thread(() -> {
                     sleep(100);
                     log("onNext");
                     subscriber.onNext(7);
                     subscriber.onNext(3);
                     subscriber.onNext(4);
                     subscriber.onCompleted();
-                }
-            }, "mythread0").start();
-        });
+                }, "mythread0").start());
 
-        final Observable<Integer> observable1 = Observable.range(0, 5);
-        final Observable<String> observable2 = Observable.just("a", "b");
+        final Observable<String> observable1 = Observable.just("a", "b");
 
-        final Observable<String> zip = Observable.zip(observable0, observable2, (i1, i2) -> {
+        final Observable<String> zip = Observable.zip(observable0, observable1, (i1, i2) -> {
             log("zip " + i1 + ", " + i2);
             return i1 + i2;
         });
